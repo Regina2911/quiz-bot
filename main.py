@@ -3,6 +3,7 @@ from telebot import types
 from logic import *
 from config import TOKEN
 from db import DB_Manager
+from telebot.types import ReplyKeyboardRemove
 
 bot = telebot.TeleBot(TOKEN)
 users = {}
@@ -15,8 +16,24 @@ db.create_table()
 def start(message):
     bot.send_message(
         message.chat.id,
-        "Привет, я бот-квиз! \n/start_quiz — начать квиз\n/score — посмотреть общий счёт"
+        "Привет, я бот-квиз! \n/start_quiz — начать квиз\n/stop_quiz — остановить квиз\n/score — посмотреть общий счёт"
     )
+
+
+@bot.message_handler(commands=['stop_quiz'])
+def stop_quiz(message):
+    user_id = message.chat.id
+
+    if user_id in users:
+        del users[user_id]
+
+        bot.send_message(
+            user_id,
+            "Квиз остановлен ❌",
+            reply_markup=ReplyKeyboardRemove()
+        )
+    else:
+        bot.send_message(user_id, "Ты ещё не начал квиз 🤔")
 
 @bot.message_handler(commands=['score'])
 def score(message):
@@ -48,28 +65,25 @@ def send_question(user_id):
     bot.send_message(user_id, question.text, reply_markup=markup)
 
 
+
 @bot.message_handler(func=lambda message: True)
 def handle_answer(message):
     user_id = message.chat.id
 
-    # ❗ игнорируем команды
     if message.text.startswith("/"):
         return
 
-    # ❗ если не начал игру
     if user_id not in users:
         bot.send_message(user_id, "Сначала напиши /start_quiz")
         return
 
     user = users[user_id]
 
-    # ❗ защита от ошибки (квиз закончился)
     if user.current_question >= len(questions):
         return
 
     answer = message.text
 
-    # ✅ проверка ответа (без учёта регистра)
     if quiz.check_answer(user, answer):
         user.score += 1
         db.add_point(user_id)
@@ -79,7 +93,6 @@ def handle_answer(message):
 
     user.current_question += 1
 
-    # 🔄 следующий вопрос или конец
     if user.current_question < len(questions):
         send_question(user_id)
     else:
